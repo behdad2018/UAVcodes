@@ -1,0 +1,190 @@
+% unsteady 3D wing lifting line method by B. Davoudi 6/02/2016
+% this code uses cla as an input
+%%
+clc; clear all;
+Nx=1;                         % chordwise panel per hald wing
+Ny=10;                        % spanwise panel per hald wing
+AR=8;
+b=10;
+tr=1;
+
+Lam=degtorad(0);              % sweep angle, backward swept, positive
+dih=degtorad(0);              % dihedral angle defined at the c/4
+aoa=degtorad(45);             % angle of attack
+aoa_z=zeros(1,2*Ny)';         % zero lift angle of attack
+
+S=b^2/AR;                    % wing surface
+wl=b/cos(Lam);               % span length normal to the unswept wing(length of two wings) %%%%%%%%%%%%%%%
+cr=2*S/wl*(1/(1+1/tr));      % chord length at the root
+uinf=1;                      % incidence velocity
+u=uinf*[1 0 0];              % incidence velocity vector
+hh=1/(tr-1)*wl*0.5;          % hh+b = triangle height formed by a half wing extented from the tip
+
+L=2*b;                       % length of the wake
+dt=cr*uinf;                  % time step
+NL=L/dt;                     % number of pannels in the wake
+
+% analytical viscous data -- cl for 2-D section
+
+alpha=0:0.0001:90;
+cl=pi*sind(2*(alpha));
+
+
+% chord lengths arranged from -y to y
+
+if tr~=1
+    c=[fliplr(cr*((hh+b/2)-linspace(0.5*dly,0.5*b-0.5*dly,Ny))/(hh+b/2)*cos(aoa)) cr*((hh+b/2)-linspace(0.5*dly,0.5*b-0.5*dly,Ny))/(hh+b/2)*cos(aoa)];
+else
+    c=repmat(cr,1,2*Ny);
+end
+
+dly=0.5*wl/Ny;               % pannel length span wise
+
+% chord lengths arranged from -y to y
+
+if tr~=1
+    c=[fliplr(cr*((hh+b/2)-linspace(0.5*dly,0.5*b-0.5*dly,Ny))/(hh+b/2)*cos(aoa)) cr*((hh+b/2)-linspace(0.5*dly,0.5*b-0.5*dly,Ny))/(hh+b/2)*cos(aoa)];
+else
+    c=repmat(cr,1,2*Ny);
+end
+
+% location of nodes at the quarter chord -y to y
+leng=linspace(0.5*dly,0.5*wl-0.5*dly,Ny);
+dl_x=c/Nx;                                        % pannel length stream wise
+dlx=min(dl_x);                                    % this should be modified for tr~=1
+
+% locations of each pannel quarter chord on the wing
+y=[fliplr(-leng) leng]*cos(Lam)*cos(dih);
+z=[fliplr(leng) leng]*(sin(dih)-sin(aoa)*sin(Lam));
+x=[fliplr(leng) leng]*sin(Lam)*cos(aoa);
+
+% collocation point only differs in x and z
+xcol=x+.5*c*cos(aoa);zcol=z-.5*c*sin(aoa);ycol=y;
+
+edger=[x(Ny+2)-x(Ny+1) y(Ny+2)-y(Ny+1) z(Ny+2)-z(Ny+1)];  % the c/4 vector line for the right half (+y)
+edgel=[x(1)-x(2) y(1)-y(2) z(1)-z(2)];                    % the c/4 vector line for the left half (-y)
+edgeb=[cr/4*cos(aoa) 0 -cr/4*sin(aoa)];                   % root base section
+
+
+% right and left normal vectors
+nr=cross(edgeb,edger)/norm(cross(edgeb,edger));
+nl=cross(edgel,edgeb)/norm(cross(edgeb,edger));
+
+% pannels normal from -y to +y
+n=repmat([repmat(nl',1,Ny) repmat(nr',1,Ny)],1,Nx);
+
+%  RHS
+% maximum simulation time
+tmax=25;
+
+% time step
+dt=1/16*dlx*Nx/uinf;
+% dlw=dt*uinf;
+
+% firt wake row locations -- the leading element of the wake vortex ring measure from TE pannel
+xw=repmat(x+dlx*cos(aoa),tmax-1,1);
+yw=repmat(y,tmax-1,1);
+zw=repmat(z-dlx*sin(aoa),tmax-1,1);
+
+% elleptical distribution
+% be=uinf*S*0.05;           % vertical radius
+% ae=b/2;                   % horizontal radius
+% ye=y;
+% G=sqrt(be^2*(1-ye.^2/ae^2))';
+% plot(ye,G);hold on;
+
+
+
+er=1;
+wake=0;
+dx=c'/1001;
+cc=0;
+%%
+
+while er>1e-2
+    
+    cc=cc+1
+
+    for i=1:2*Ny
+        % panels interations on the wing
+        w12=0;
+        for j=1:2*Ny
+            index1col=ceil(i/(2*Ny));
+            index2col=i-(2*Ny)*(index1col-1);
+            index1=ceil(j/(2*Ny));
+            index2=j-(2*Ny)*(index1-1);
+            x1=x(index1,index2);
+            y1=y(index1,index2);
+            z1=z(index1,index2);
+            % bond vortex
+            x2=x(index1col,index2col);
+            y2=y(index1col,index2col);
+            z2=z(index1col,index2col);
+            xcol1=xcol(index1col,index2col);
+            ycol1=ycol(index1col,index2col);
+            zcol1=zcol(index1col,index2col);
+            
+            [a1,A1(i,j)]=vortexring(n(:,i),dlx,dly,aoa,Lam,dih,xcol1,ycol1,zcol1,x1,y1,z1,1);     % Effect of ring vortices on the wing
+            [a2,A2(i,j)]=vortexring(n(:,i),b,dly,0,0,0,xcol1,ycol1,zcol1,x1+dlx*cos(aoa),y1,z1-dlx*sin(aoa),1);
+            
+          if cc>1
+            [a1,w1]=vortexring(n(:,i),dlx,dly,aoa,Lam,dih ,x2,y2,z2,  x1,y1,z1,Go(j,cc-1));     % Effect of ring vortices on the wing
+            [a2,w2]=vortexring(n(:,i),b,dly,0,  0,  0  ,x2,y2,z2,  x1+dlx*cos(aoa),y1,z1-dlx*sin(aoa),Go(j,cc-1));        
+            w12=w12+w1+w2;
+          end
+        end
+        
+%         for j=1:2*Nw*Ny
+%             
+%                 index1w=ceil(j/(2*Ny));
+%                 index2w=j-(2*Ny)*(index1w-1);
+%                 xw1=xw(index1w,index2w);      yw1=yw(1,index2w);      zw1=zw(1,index2w);
+%                 %                        
+%                  Gw1(j)=(uinf*dt+dly)*Gw(j)/(dlw1(index1w,index2w)+dly);  % fixing the value wake vorticity
+%                 [a1,wake1]=vortexring(n(:,i),dlw1(index1w,index2w),dly,0,0,0,xcol1,ycol1,zcol1,xw1,yw1,zw1,Gw1(j));
+%                 wake2=wake2+wake1;
+%                 a2=a2+a1;
+%         end
+              
+       win(i)=w12;
+    end
+    
+   A=A1+A2;
+   RHS=dot(-repmat(u',1,2*Ny),n)'-wake';
+   Go(:,cc)=linsolve(A,RHS);
+    
+   if cc>1 
+       
+   aoa_i=atan(-win'/uinf);
+   aoa_e=aoa-aoa_i;
+
+   start=find(ones(1,2*Ny)-(xcol>c*cos(aoa))==1);
+   
+   G = 0.5*c'.*uinf.*cl(round(radtodeg(aoa_e-aoa_z)*10000)+1)';
+    
+   per=abs(G-Go(:,cc))./Go(:,cc);
+     
+   dx=c'/11 .* (per>0.08) + c'/1001 .*(per<0.08) -c'/1001 .*(per<0.01) + c'/5001 .*(per<0.01)  - c'/5001 .*(per<0.002)  + c'/20001 .*(per<0.002) ;
+        
+    
+%     xcol(start(1):start(end))=xcol(start(1):start(end))-sign(Go(start(1):start(end),cc-1)'-G(start(1):start(end))').*dx(start(1):start(end))'*cos(aoa)
+%     zcol(start(1):start(end))=zcol(start(1):start(end))+sign(Go(start(1):start(end),cc-1)'-G(start(1):start(end))').*dx(start(1):start(end))'*sin(aoa);
+   
+%     xcol=xcol-sign(Go(:,cc)'-G').*dx'*cos(aoa) .* (ones(1,2*Ny)-(xcol>c*cos(aoa))) ;
+%     zcol=zcol+sign(Go(:,cc)'-G').*dx'*sin(aoa) .* (ones(1,2*Ny)-(xcol>c*cos(aoa))) ;
+
+    xcol=xcol-sign(Go(:,cc)'-G').*dx'*cos(aoa);
+    zcol=zcol+sign(Go(:,cc)'-G').*dx'*sin(aoa).* (ones(1,2*Ny)-(xcol>c*cos(aoa)))+...
+         -(xcol>c*cos(aoa)).*(zcol-z+c*sin(aoa));
+
+   er=norm(Go(start(1):start(end),cc-1)'-G(start(1):start(end))')
+   
+   end
+end
+
+%%
+plot(y(start(1):start(end)),Go(start(1):start(end),cc-1));hold on
+plot(y(start(1):start(end)),G(start(1):start(end)));legend('Go','G')
+ %%
+ plot(y,Go(:,cc-1));hold on
+ plot(y,G);legend('Go','G')
