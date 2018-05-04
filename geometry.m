@@ -1,4 +1,4 @@
-%% simplified unsteady 3D wing lifting line method by B. Davoudi
+% simplified unsteady 3D wing lifting line method by B. Davoudi
 % Aerospace Engineering Department, University of Michigan 7/27/2016
 function [x,y,z,xcol,ycol,zcol,n,dl_x,dly,S,alpha,cr]=geometry(AR,b,tr,Nx,Ny,Lam,dih,aoa,aoaf_L,aoaf_R)
 
